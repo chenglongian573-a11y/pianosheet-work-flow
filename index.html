@@ -206,6 +206,7 @@
         </select>
       </div>
 
+      <!-- 三種檢視切換：流程清單 / 進度看板 / 純曲目清單 -->
       <div class="inline-flex bg-slate-200/80 p-1 rounded-xl self-start sm:self-auto">
         <button id="view-list-btn" onclick="setView('list')"
           class="px-3 py-1 text-xs font-semibold rounded-lg bg-white text-slate-900 shadow-xs transition">
@@ -215,10 +216,14 @@
           class="px-3 py-1 text-xs font-semibold rounded-lg text-slate-600 hover:text-slate-900 transition">
           進度看板
         </button>
+        <button id="view-catalog-btn" onclick="setView('catalog')"
+          class="px-3 py-1 text-xs font-semibold rounded-lg text-slate-600 hover:text-slate-900 transition">
+          純曲目清單
+        </button>
       </div>
     </section>
 
-    <!-- 曲目列表 / 看板容器 -->
+    <!-- 曲目列表 / 看板 / 純曲目清單容器 -->
     <section id="songs-container" class="pb-10"></section>
 
   </main>
@@ -306,7 +311,6 @@
   <div id="toast" class="fixed bottom-5 right-5 bg-slate-900 text-white text-xs font-medium px-4 py-2.5 rounded-xl shadow-lg opacity-0 pointer-events-none transition-opacity duration-200 z-50"></div>
 
   <script>
-    // 預設連接你已部署的 Google Apps Script 網址
     const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbyRqxaxYiyHIerwri03uqZko7XCm3EshuG7cIrBl1ZQ-_mfo6na3HfVflvzXhhmGzcZ3A/exec';
     const DEFAULT_CODE = 'xhs-piano-studio';
 
@@ -325,7 +329,6 @@
       isSyncing: false
     };
 
-    // 初始化載入
     document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('workspace-label').textContent = state.code;
       try {
@@ -336,7 +339,6 @@
       renderAll();
       syncFromCloud(false);
 
-      // 每 30 秒自動背景同步一次（僅在視窗可見時）
       setInterval(() => {
         if (!document.hidden && !state.isSyncing) {
           syncFromCloud(false);
@@ -366,7 +368,6 @@
       return val === true || val === 'true' || val === 'TRUE' || val === 1 || val === '1';
     }
 
-    // 從 Google Sheet 讀取最新曲庫
     async function syncFromCloud(showFeedback = false) {
       if (!state.gasUrl) return;
       state.isSyncing = true;
@@ -416,7 +417,6 @@
       }
     }
 
-    // 寫入 Google Sheet
     async function pushToCloud() {
       localStorage.setItem(STORAGE_KEYS.SONGS, JSON.stringify(state.songs));
       renderAll();
@@ -450,7 +450,6 @@
       }
     }
 
-    // 防重覆檢查
     function normalizeTitle(str) {
       return str.toLowerCase().replace(/[\s\-_（）()【】\[\]《》'"’“.,，。!！?？]/g, '');
     }
@@ -483,7 +482,6 @@
       box.classList.remove('hidden');
     }
 
-    // 新增單首曲目
     function handleAddSong(e) {
       e.preventDefault();
       const titleInput = document.getElementById('song-title');
@@ -500,7 +498,7 @@
         source: sourceInput.value,
         notes: notesInput.value.trim(),
         steps: {
-          fetch: true, // 新增曲目預設已完成「攞譜」
+          fetch: true,
           simplify: false,
           audio: false,
           upload: false
@@ -518,7 +516,6 @@
       pushToCloud();
     }
 
-    // 切換四步進度
     function toggleStep(songId, stepKey) {
       const song = state.songs.find(s => s.id === songId);
       if (!song) return;
@@ -527,7 +524,6 @@
       pushToCloud();
     }
 
-    // 刪除曲目
     function deleteSong(songId) {
       const song = state.songs.find(s => s.id === songId);
       if (!song) return;
@@ -537,7 +533,6 @@
       pushToCloud();
     }
 
-    // 配額計算與手動微調
     function getQuotaOffsets() {
       const todayKey = new Date().toISOString().slice(0, 10);
       const monthKey = new Date().toISOString().slice(0, 7);
@@ -630,15 +625,13 @@
 
     function setView(mode) {
       state.view = mode;
-      const listBtn = document.getElementById('view-list-btn');
-      const boardBtn = document.getElementById('view-board-btn');
-      if (mode === 'list') {
-        listBtn.className = 'px-3 py-1 text-xs font-semibold rounded-lg bg-white text-slate-900 shadow-xs transition';
-        boardBtn.className = 'px-3 py-1 text-xs font-semibold rounded-lg text-slate-600 hover:text-slate-900 transition';
-      } else {
-        boardBtn.className = 'px-3 py-1 text-xs font-semibold rounded-lg bg-white text-slate-900 shadow-xs transition';
-        listBtn.className = 'px-3 py-1 text-xs font-semibold rounded-lg text-slate-600 hover:text-slate-900 transition';
-      }
+      const activeClass = 'px-3 py-1 text-xs font-semibold rounded-lg bg-white text-slate-900 shadow-xs transition';
+      const inactiveClass = 'px-3 py-1 text-xs font-semibold rounded-lg text-slate-600 hover:text-slate-900 transition';
+
+      document.getElementById('view-list-btn').className = mode === 'list' ? activeClass : inactiveClass;
+      document.getElementById('view-board-btn').className = mode === 'board' ? activeClass : inactiveClass;
+      document.getElementById('view-catalog-btn').className = mode === 'catalog' ? activeClass : inactiveClass;
+
       renderSongs();
     }
 
@@ -690,6 +683,8 @@
 
       if (state.view === 'board') {
         renderBoardView(container, songs);
+      } else if (state.view === 'catalog') {
+        renderCatalogView(container, songs);
       } else {
         renderListView(container, songs);
       }
@@ -783,7 +778,58 @@
         </div>`;
     }
 
-    // 彈窗控制
+    // 純曲目清單看板（極簡高密度曲庫總覽）
+    function renderCatalogView(container, songs) {
+      container.innerHTML = `
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
+          <div class="px-5 py-3.5 bg-slate-50/80 border-b border-slate-200 flex items-center justify-between gap-3">
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-bold text-slate-700">純曲目清單</span>
+              <span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-slate-200/80 text-slate-700">共 ${songs.length} 首</span>
+            </div>
+            <button type="button" onclick="copyAllCatalogTitles()"
+              class="px-3 py-1 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg transition shadow-2xs">
+              📋 一鍵複製全部歌名
+            </button>
+          </div>
+          <div class="divide-y divide-slate-100">
+            ${songs.map((s, idx) => {
+              const isDone = s.steps.fetch && s.steps.simplify && s.steps.audio && s.steps.upload;
+              const stageLabel = getStageLabel(s);
+              const dateStr = s.createdAt ? new Date(s.createdAt).toLocaleDateString('zh-HK', { month: '2-digit', day: '2-digit' }) : '';
+              return `
+                <div class="px-5 py-3 flex items-center justify-between gap-3 hover:bg-slate-50/70 transition">
+                  <div class="flex items-center gap-3 min-w-0">
+                    <span class="w-7 text-xs font-mono text-slate-400 shrink-0">${idx + 1}.</span>
+                    <span class="text-sm font-semibold text-slate-900 truncate">${escapeHtml(s.title)}</span>
+                    ${s.notes ? `<span class="hidden sm:inline text-xs text-slate-400 truncate">— ${escapeHtml(s.notes)}</span>` : ''}
+                  </div>
+                  <div class="flex items-center gap-2.5 shrink-0">
+                    <span class="px-2 py-0.5 text-[11px] font-medium rounded-md ${
+                      s.source === 'MuseScore' ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-100 text-slate-600'
+                    }">${escapeHtml(s.source)}</span>
+                    ${dateStr ? `<span class="hidden sm:inline text-xs font-mono text-slate-400">${dateStr}</span>` : ''}
+                    <span class="px-2 py-0.5 text-[11px] font-semibold rounded-md ${
+                      isDone ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                    }">${stageLabel}</span>
+                  </div>
+                </div>`;
+            }).join('')}
+          </div>
+        </div>`;
+    }
+
+    function copyAllCatalogTitles() {
+      const songs = getFilteredSongs();
+      if (!songs.length) return;
+      const text = songs.map((s, i) => `${i + 1}. ${s.title}`).join('\n');
+      navigator.clipboard?.writeText(text).then(() => {
+        showToast(`已複製 ${songs.length} 首歌名到剪貼簿`);
+      }).catch(() => {
+        prompt('請手動複製以下歌單：', text);
+      });
+    }
+
     function openSettingsModal() {
       document.getElementById('setting-gas-url').value = state.gasUrl;
       document.getElementById('setting-workspace-code').value = state.code;
