@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>小紅書簡譜製作工作流</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap');
+    body {
+      font-family: 'Noto Sans TC', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #f8fafc;
+      color: #0f172a;
+    }
+    .step-btn {
+      transition: all 0.15s ease;
+    }
+    .step-btn:active {
+      transform: scale(0.96);
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- 頂部導航欄 -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold text-lg shadow-sm">
+          ♪
+        </div>
+        <div>
+          <h1 class="text-base sm:text-lg font-bold text-slate-900 leading-tight">小紅書簡譜工作流</h1>
+          <div class="flex items-center gap-2 text-xs text-slate-500">
+            <span id="sync-indicator" class="inline-flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+              <span>連線中...</span>
+            </span>
+            <span>•</span>
+            <span id="workspace-label" class="font-mono text-slate-600">xhs-piano-studio</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button onclick="syncFromCloud(true)" title="立即從 Google Sheet 同步最新進度"
+          class="px-3 py-1.5 text-xs sm:text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition flex items-center gap-1.5">
+          <span id="refresh-icon">↻</span>
+          <span class="hidden sm:inline">立即同步</span>
+        </button>
+        <button onclick="openBatchModal()"
+          class="px-3 py-1.5 text-xs sm:text-sm font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg transition">
+          批量加歌
+        </button>
+        <button onclick="openBackupModal()"
+          class="px-3 py-1.5 text-xs sm:text-sm font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg transition">
+          備份
+        </button>
+        <button onclick="openSettingsModal()"
+          class="px-3 py-1.5 text-xs sm:text-sm font-medium text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition">
+          連線設定
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 space-y-6 flex-1">
+
+    <!-- 儀表板：MuseScore 配額與總進度 -->
+    <section class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <!-- 今日 MuseScore 配額 -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col justify-between">
+        <div class="flex items-start justify-between">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">MuseScore 今日配額</p>
+            <div class="mt-1 flex items-baseline gap-2">
+              <span id="daily-count" class="text-3xl font-bold text-slate-900">0</span>
+              <span class="text-sm font-medium text-slate-400">/ 20 份</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
+            <button onclick="adjustQuota('daily', -1)" class="w-7 h-7 rounded-md bg-white text-slate-700 hover:bg-slate-50 font-bold shadow-xs">−</button>
+            <button onclick="adjustQuota('daily', 1)" class="w-7 h-7 rounded-md bg-white text-slate-700 hover:bg-slate-50 font-bold shadow-xs">+</button>
+          </div>
+        </div>
+        <div class="mt-4">
+          <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+            <div id="daily-bar" class="h-full bg-indigo-600 rounded-full transition-all duration-300" style="width: 0%"></div>
+          </div>
+          <p id="daily-hint" class="mt-2 text-xs font-medium text-amber-600">今日仲差 20 份回本</p>
+        </div>
+      </div>
+
+      <!-- 本月 MuseScore 配額 -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col justify-between">
+        <div class="flex items-start justify-between">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">MuseScore 本月配額</p>
+            <div class="mt-1 flex items-baseline gap-2">
+              <span id="monthly-count" class="text-3xl font-bold text-slate-900">0</span>
+              <span class="text-sm font-medium text-slate-400">/ 300 份</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
+            <button onclick="adjustQuota('monthly', -1)" class="w-7 h-7 rounded-md bg-white text-slate-700 hover:bg-slate-50 font-bold shadow-xs">−</button>
+            <button onclick="adjustQuota('monthly', 1)" class="w-7 h-7 rounded-md bg-white text-slate-700 hover:bg-slate-50 font-bold shadow-xs">+</button>
+          </div>
+        </div>
+        <div class="mt-4">
+          <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+            <div id="monthly-bar" class="h-full bg-emerald-600 rounded-full transition-all duration-300" style="width: 0%"></div>
+          </div>
+          <p id="monthly-hint" class="mt-2 text-xs font-medium text-slate-500">本月尚餘 300 份配額可用</p>
+        </div>
+      </div>
+
+      <!-- 曲庫總進度 -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col justify-between">
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">曲庫製作總覽</p>
+          <div class="mt-1 flex items-baseline gap-2">
+            <span id="total-songs" class="text-3xl font-bold text-slate-900">0</span>
+            <span class="text-sm font-medium text-slate-400">首已收錄</span>
+          </div>
+        </div>
+        <div class="mt-4 grid grid-cols-2 gap-2 text-xs">
+          <div class="bg-slate-50 rounded-lg px-3 py-2 border border-slate-100">
+            <span class="text-slate-500">製作中：</span>
+            <span id="in-progress-count" class="font-bold text-indigo-600">0</span>
+          </div>
+          <div class="bg-emerald-50/70 rounded-lg px-3 py-2 border border-emerald-100">
+            <span class="text-emerald-700">已上載：</span>
+            <span id="completed-count" class="font-bold text-emerald-700">0</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 新增曲目表單（含即時防重覆偵測） -->
+    <section class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+      <form id="add-song-form" onsubmit="handleAddSong(event)" class="space-y-3">
+        <div class="grid grid-cols-1 sm:grid-cols-12 gap-3">
+          <div class="sm:col-span-5">
+            <label class="block text-xs font-semibold text-slate-600 mb-1">曲目名稱 *</label>
+            <input type="text" id="song-title" required placeholder="輸入歌名（自動檢查是否重覆攞譜）"
+              oninput="checkDuplicateTitle(this.value)"
+              class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900" />
+          </div>
+          <div class="sm:col-span-3">
+            <label class="block text-xs font-semibold text-slate-600 mb-1">琴譜來源</label>
+            <select id="song-source"
+              class="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-slate-900">
+              <option value="MuseScore">MuseScore（計入配額）</option>
+              <option value="其他來源">其他來源 / 自扒</option>
+            </select>
+          </div>
+          <div class="sm:col-span-4">
+            <label class="block text-xs font-semibold text-slate-600 mb-1">備註 / 調性（選填）</label>
+            <div class="flex gap-2">
+              <input type="text" id="song-notes" placeholder="例如：C大調、副歌版"
+                class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900" />
+              <button type="submit"
+                class="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-xl whitespace-nowrap transition shadow-xs">
+                + 新增
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 防重覆警告區 -->
+        <div id="duplicate-warning" class="hidden rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-xs text-amber-900">
+          <div class="font-bold flex items-center gap-1.5 text-amber-800">
+            <span>⚠️ 曲庫已有相似或相同歌名，請確認避免重覆攞譜：</span>
+          </div>
+          <ul id="duplicate-list" class="mt-1.5 space-y-1 list-disc list-inside text-amber-800"></ul>
+        </div>
+      </form>
+    </section>
+
+    <!-- 搜尋、篩選與檢視切換 -->
+    <section class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <div class="relative">
+          <input type="text" id="search-input" placeholder="搜尋歌名或備註..." oninput="renderSongs()"
+            class="pl-3.5 pr-8 py-1.5 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900 w-52 sm:w-64" />
+          <button type="button" onclick="clearSearch()" id="clear-search-btn"
+            class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs">✕</button>
+        </div>
+
+        <select id="filter-stage" onchange="renderSongs()"
+          class="px-3 py-1.5 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900">
+          <option value="all">全部進度</option>
+          <option value="incomplete">未完成（製作中）</option>
+          <option value="need-fetch">1. 待攞譜</option>
+          <option value="need-simplify">2. 待簡化</option>
+          <option value="need-audio">3. 待音檔</option>
+          <option value="need-upload">4. 待上載</option>
+          <option value="completed">已完成上載</option>
+        </select>
+
+        <select id="filter-source" onchange="renderSongs()"
+          class="px-3 py-1.5 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900">
+          <option value="all">全部來源</option>
+          <option value="MuseScore">僅限 MuseScore</option>
+          <option value="其他來源">其他來源</option>
+        </select>
+      </div>
+
+      <div class="inline-flex bg-slate-200/80 p-1 rounded-xl self-start sm:self-auto">
+        <button id="view-list-btn" onclick="setView('list')"
+          class="px-3 py-1 text-xs font-semibold rounded-lg bg-white text-slate-900 shadow-xs transition">
+          流程清單
+        </button>
+        <button id="view-board-btn" onclick="setView('board')"
+          class="px-3 py-1 text-xs font-semibold rounded-lg text-slate-600 hover:text-slate-900 transition">
+          進度看板
+        </button>
+      </div>
+    </section>
+
+    <!-- 曲目列表 / 看板容器 -->
+    <section id="songs-container" class="pb-10"></section>
+
+  </main>
+
+  <!-- 連線設定彈窗 -->
+  <div id="settings-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-bold text-slate-900">Google Sheets 雲端同步設定</h2>
+        <button onclick="closeSettingsModal()" class="text-slate-400 hover:text-slate-600 text-lg">✕</button>
+      </div>
+      <p class="text-xs text-slate-500 leading-relaxed">
+        網頁已預先綁定你嘅 Google Sheet 資料庫。你同 Partner 只要打開同一條網站連結並使用相同「協作代碼」，所有改動都會自動寫入 Google Sheet 並雙向同步。
+      </p>
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Google Apps Script 網頁應用程式網址</label>
+          <input type="text" id="setting-gas-url"
+            class="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">協作空間代碼（須與 Apps Script 內 SECRET_CODE 一致）</label>
+          <input type="text" id="setting-workspace-code"
+            class="w-full px-3 py-2 text-sm font-mono border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900" />
+        </div>
+      </div>
+      <div class="flex items-center justify-between pt-2">
+        <button onclick="copyShareUrl()" class="text-xs font-semibold text-indigo-600 hover:text-indigo-700">
+          📋 複製目前網站網址傳給 Partner
+        </button>
+        <div class="flex gap-2">
+          <button onclick="closeSettingsModal()" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl">取消</button>
+          <button onclick="saveSettings()" class="px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-xl">儲存並連線</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 批量加歌彈窗 -->
+  <div id="batch-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-bold text-slate-900">批量貼上歌名</h2>
+        <button onclick="closeBatchModal()" class="text-slate-400 hover:text-slate-600 text-lg">✕</button>
+      </div>
+      <p class="text-xs text-slate-500">每行輸入一首歌名，系統會自動跳過曲庫內已存在的重覆歌名：</p>
+      <textarea id="batch-textarea" rows="6" placeholder="晴天&#10;稻香&#10;江南&#10;起風了"
+        class="w-full p-3 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900"></textarea>
+      <div class="flex items-center justify-between">
+        <select id="batch-source" class="px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white">
+          <option value="MuseScore">來源：MuseScore</option>
+          <option value="其他來源">來源：其他來源</option>
+        </select>
+        <div class="flex gap-2">
+          <button onclick="closeBatchModal()" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl">取消</button>
+          <button onclick="handleBatchAdd()" class="px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-xl">確認匯入</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 備份 / 還原彈窗 -->
+  <div id="backup-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-bold text-slate-900">曲庫備份與還原</h2>
+        <button onclick="closeBackupModal()" class="text-slate-400 hover:text-slate-600 text-lg">✕</button>
+      </div>
+      <p class="text-xs text-slate-500">除咗自動儲存於 Google Sheet 外，你亦可以隨時匯出本機 JSON 備份檔。</p>
+      <div class="space-y-3 pt-1">
+        <button onclick="exportJsonBackup()"
+          class="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl transition">
+          ⬇ 下載 JSON 完整備份檔
+        </button>
+        <div class="border-t border-slate-200 pt-3">
+          <label class="block text-xs font-semibold text-slate-700 mb-1.5">從 JSON 備份檔還原（自動合併去重）：</label>
+          <input type="file" accept=".json" onchange="importJsonBackup(event)"
+            class="block w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 提示訊息 Toast -->
+  <div id="toast" class="fixed bottom-5 right-5 bg-slate-900 text-white text-xs font-medium px-4 py-2.5 rounded-xl shadow-lg opacity-0 pointer-events-none transition-opacity duration-200 z-50"></div>
+
+  <script>
+    // 預設連接你已部署的 Google Apps Script 網址
+    const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbyRqxaxYiyHIerwri03uqZko7XCm3EshuG7cIrBl1ZQ-_mfo6na3HfVflvzXhhmGzcZ3A/exec';
+    const DEFAULT_CODE = 'xhs-piano-studio';
+
+    const STORAGE_KEYS = {
+      GAS_URL: 'xhs_wf_gas_url',
+      CODE: 'xhs_wf_code',
+      SONGS: 'xhs_wf_songs_cache',
+      QUOTA_OFFSETS: 'xhs_wf_quota_offsets'
+    };
+
+    let state = {
+      gasUrl: localStorage.getItem(STORAGE_KEYS.GAS_URL) || DEFAULT_GAS_URL,
+      code: localStorage.getItem(STORAGE_KEYS.CODE) || DEFAULT_CODE,
+      songs: [],
+      view: 'list',
+      isSyncing: false
+    };
+
+    // 初始化載入
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('workspace-label').textContent = state.code;
+      try {
+        const cached = JSON.parse(localStorage.getItem(STORAGE_KEYS.SONGS) || '[]');
+        if (Array.isArray(cached)) state.songs = cached;
+      } catch (e) {}
+
+      renderAll();
+      syncFromCloud(false);
+
+      // 每 30 秒自動背景同步一次（僅在視窗可見時）
+      setInterval(() => {
+        if (!document.hidden && !state.isSyncing) {
+          syncFromCloud(false);
+        }
+      }, 30000);
+    });
+
+    function showToast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.remove('opacity-0');
+      clearTimeout(el._timer);
+      el._timer = setTimeout(() => el.classList.add('opacity-0'), 2600);
+    }
+
+    function setSyncStatus(status, text) {
+      const el = document.getElementById('sync-indicator');
+      const colors = {
+        syncing: 'bg-amber-400 animate-pulse',
+        ok: 'bg-emerald-500',
+        error: 'bg-rose-500'
+      };
+      el.innerHTML = `<span class="w-2 h-2 rounded-full ${colors[status] || 'bg-slate-400'}"></span><span>${text}</span>`;
+    }
+
+    function toBool(val) {
+      return val === true || val === 'true' || val === 'TRUE' || val === 1 || val === '1';
+    }
+
+    // 從 Google Sheet 讀取最新曲庫
+    async function syncFromCloud(showFeedback = false) {
+      if (!state.gasUrl) return;
+      state.isSyncing = true;
+      setSyncStatus('syncing', '同步中...');
+      const refreshIcon = document.getElementById('refresh-icon');
+      if (refreshIcon) refreshIcon.classList.add('animate-spin');
+
+      try {
+        const url = `${state.gasUrl}?code=${encodeURIComponent(state.code)}&_t=${Date.now()}`;
+        const res = await fetch(url);
+        const data = await res.json();
+
+        if (data.error) {
+          setSyncStatus('error', `錯誤：${data.error}`);
+          if (showFeedback) showToast(`同步失敗：${data.error}`);
+          return;
+        }
+
+        if (Array.isArray(data.songs)) {
+          state.songs = data.songs.map(item => ({
+            id: String(item.id || Date.now() + Math.random()),
+            title: String(item.title || '').trim(),
+            source: String(item.source || 'MuseScore'),
+            notes: String(item.notes || ''),
+            steps: {
+              fetch: toBool(item.step1),
+              simplify: toBool(item.step2),
+              audio: toBool(item.step3),
+              upload: toBool(item.step4)
+            },
+            createdAt: item.createdAt || new Date().toISOString(),
+            updatedAt: item.updatedAt || new Date().toISOString()
+          })).filter(s => s.title);
+
+          localStorage.setItem(STORAGE_KEYS.SONGS, JSON.stringify(state.songs));
+          renderAll();
+          setSyncStatus('ok', '已與 Google Sheet 同步');
+          if (showFeedback) showToast(`已同步最新資料（共 ${state.songs.length} 首）`);
+        }
+      } catch (err) {
+        console.error(err);
+        setSyncStatus('error', '離線（使用本機快取）');
+        if (showFeedback) showToast('無法連線至 Google Sheet，請檢查網址或權限');
+      } finally {
+        state.isSyncing = false;
+        if (refreshIcon) refreshIcon.classList.remove('animate-spin');
+      }
+    }
+
+    // 寫入 Google Sheet
+    async function pushToCloud() {
+      localStorage.setItem(STORAGE_KEYS.SONGS, JSON.stringify(state.songs));
+      renderAll();
+
+      if (!state.gasUrl) return;
+      state.isSyncing = true;
+      setSyncStatus('syncing', '儲存至 Google Sheet...');
+
+      try {
+        const res = await fetch(state.gasUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            code: state.code,
+            songs: state.songs
+          })
+        });
+        const data = await res.json();
+        if (data.status === 'ok') {
+          setSyncStatus('ok', '已儲存至 Google Sheet');
+        } else {
+          setSyncStatus('error', data.error || '儲存失敗');
+          showToast(`雲端儲存異常：${data.error || '未知錯誤'}`);
+        }
+      } catch (err) {
+        console.error(err);
+        setSyncStatus('error', '儲存失敗（已暫存本機）');
+        showToast('雲端同步失敗，資料已暫存於瀏覽器');
+      } finally {
+        state.isSyncing = false;
+      }
+    }
+
+    // 防重覆檢查
+    function normalizeTitle(str) {
+      return str.toLowerCase().replace(/[\s\-_（）()【】\[\]《》'"’“.,，。!！?？]/g, '');
+    }
+
+    function checkDuplicateTitle(inputVal) {
+      const box = document.getElementById('duplicate-warning');
+      const list = document.getElementById('duplicate-list');
+      const norm = normalizeTitle(inputVal);
+
+      if (!norm) {
+        box.classList.add('hidden');
+        return;
+      }
+
+      const matches = state.songs.filter(s => {
+        const sNorm = normalizeTitle(s.title);
+        return sNorm === norm || (norm.length >= 2 && (sNorm.includes(norm) || norm.includes(sNorm)));
+      });
+
+      if (matches.length === 0) {
+        box.classList.add('hidden');
+        return;
+      }
+
+      list.innerHTML = matches.map(m => {
+        const dateStr = m.createdAt ? new Date(m.createdAt).toLocaleDateString('zh-HK') : '未知日期';
+        const stageText = getStageLabel(m);
+        return `<li><strong>${escapeHtml(m.title)}</strong>（${escapeHtml(m.source)} • ${dateStr} 登記 • 目前進度：${stageText}）</li>`;
+      }).join('');
+      box.classList.remove('hidden');
+    }
+
+    // 新增單首曲目
+    function handleAddSong(e) {
+      e.preventDefault();
+      const titleInput = document.getElementById('song-title');
+      const sourceInput = document.getElementById('song-source');
+      const notesInput = document.getElementById('song-notes');
+
+      const title = titleInput.value.trim();
+      if (!title) return;
+
+      const now = new Date().toISOString();
+      const newSong = {
+        id: 'song_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+        title,
+        source: sourceInput.value,
+        notes: notesInput.value.trim(),
+        steps: {
+          fetch: true, // 新增曲目預設已完成「攞譜」
+          simplify: false,
+          audio: false,
+          upload: false
+        },
+        createdAt: now,
+        updatedAt: now
+      };
+
+      state.songs.unshift(newSong);
+      titleInput.value = '';
+      notesInput.value = '';
+      document.getElementById('duplicate-warning').classList.add('hidden');
+
+      showToast(`已新增「${title}」`);
+      pushToCloud();
+    }
+
+    // 切換四步進度
+    function toggleStep(songId, stepKey) {
+      const song = state.songs.find(s => s.id === songId);
+      if (!song) return;
+      song.steps[stepKey] = !song.steps[stepKey];
+      song.updatedAt = new Date().toISOString();
+      pushToCloud();
+    }
+
+    // 刪除曲目
+    function deleteSong(songId) {
+      const song = state.songs.find(s => s.id === songId);
+      if (!song) return;
+      if (!confirm(`確定要刪除「${song.title}」？`)) return;
+      state.songs = state.songs.filter(s => s.id !== songId);
+      showToast(`已刪除「${song.title}」`);
+      pushToCloud();
+    }
+
+    // 配額計算與手動微調
+    function getQuotaOffsets() {
+      const todayKey = new Date().toISOString().slice(0, 10);
+      const monthKey = new Date().toISOString().slice(0, 7);
+      try {
+        const raw = JSON.parse(localStorage.getItem(STORAGE_KEYS.QUOTA_OFFSETS) || '{}');
+        return {
+          daily: raw[todayKey] || 0,
+          monthly: raw[monthKey] || 0,
+          todayKey,
+          monthKey,
+          raw
+        };
+      } catch {
+        return { daily: 0, monthly: 0, todayKey, monthKey, raw: {} };
+      }
+    }
+
+    function adjustQuota(type, delta) {
+      const info = getQuotaOffsets();
+      const key = type === 'daily' ? info.todayKey : info.monthKey;
+      info.raw[key] = (info.raw[key] || 0) + delta;
+      localStorage.setItem(STORAGE_KEYS.QUOTA_OFFSETS, JSON.stringify(info.raw));
+      updateDashboard();
+    }
+
+    function updateDashboard() {
+      const now = new Date();
+      const todayStr = now.toISOString().slice(0, 10);
+      const monthStr = now.toISOString().slice(0, 7);
+
+      let autoDaily = 0;
+      let autoMonthly = 0;
+      let completed = 0;
+
+      state.songs.forEach(s => {
+        if (s.steps.fetch && s.steps.simplify && s.steps.audio && s.steps.upload) {
+          completed++;
+        }
+        if (s.source === 'MuseScore' && s.steps.fetch && s.createdAt) {
+          const d = new Date(s.createdAt);
+          if (!isNaN(d)) {
+            const localDate = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString();
+            if (localDate.startsWith(todayStr)) autoDaily++;
+            if (localDate.startsWith(monthStr)) autoMonthly++;
+          }
+        }
+      });
+
+      const offsets = getQuotaOffsets();
+      const dailyTotal = Math.max(0, autoDaily + offsets.daily);
+      const monthlyTotal = Math.max(0, autoMonthly + offsets.monthly);
+
+      document.getElementById('daily-count').textContent = dailyTotal;
+      document.getElementById('monthly-count').textContent = monthlyTotal;
+      document.getElementById('total-songs').textContent = state.songs.length;
+      document.getElementById('completed-count').textContent = completed;
+      document.getElementById('in-progress-count').textContent = state.songs.length - completed;
+
+      const dailyPct = Math.min(100, Math.round((dailyTotal / 20) * 100));
+      const monthlyPct = Math.min(100, Math.round((monthlyTotal / 300) * 100));
+      document.getElementById('daily-bar').style.width = `${dailyPct}%`;
+      document.getElementById('monthly-bar').style.width = `${monthlyPct}%`;
+
+      const dailyHint = document.getElementById('daily-hint');
+      if (dailyTotal >= 20) {
+        dailyHint.textContent = '🎉 今日已攞滿 20 份配額，完全回本！';
+        dailyHint.className = 'mt-2 text-xs font-semibold text-emerald-600';
+      } else {
+        dailyHint.textContent = `今日仲差 ${20 - dailyTotal} 份回本`;
+        dailyHint.className = 'mt-2 text-xs font-medium text-amber-600';
+      }
+
+      const monthlyHint = document.getElementById('monthly-hint');
+      if (monthlyTotal >= 300) {
+        monthlyHint.textContent = '🔥 本月已用滿 300 份配額！';
+        monthlyHint.className = 'mt-2 text-xs font-semibold text-emerald-600';
+      } else {
+        monthlyHint.textContent = `本月尚餘 ${300 - monthlyTotal} 份配額可攞`;
+        monthlyHint.className = 'mt-2 text-xs font-medium text-slate-500';
+      }
+    }
+
+    function getStageLabel(song) {
+      if (!song.steps.fetch) return '待攞譜';
+      if (!song.steps.simplify) return '待簡化';
+      if (!song.steps.audio) return '待音檔';
+      if (!song.steps.upload) return '待上載';
+      return '已完成';
+    }
+
+    function setView(mode) {
+      state.view = mode;
+      const listBtn = document.getElementById('view-list-btn');
+      const boardBtn = document.getElementById('view-board-btn');
+      if (mode === 'list') {
+        listBtn.className = 'px-3 py-1 text-xs font-semibold rounded-lg bg-white text-slate-900 shadow-xs transition';
+        boardBtn.className = 'px-3 py-1 text-xs font-semibold rounded-lg text-slate-600 hover:text-slate-900 transition';
+      } else {
+        boardBtn.className = 'px-3 py-1 text-xs font-semibold rounded-lg bg-white text-slate-900 shadow-xs transition';
+        listBtn.className = 'px-3 py-1 text-xs font-semibold rounded-lg text-slate-600 hover:text-slate-900 transition';
+      }
+      renderSongs();
+    }
+
+    function clearSearch() {
+      document.getElementById('search-input').value = '';
+      renderSongs();
+    }
+
+    function getFilteredSongs() {
+      const q = document.getElementById('search-input').value.trim().toLowerCase();
+      document.getElementById('clear-search-btn').classList.toggle('hidden', !q);
+
+      const stage = document.getElementById('filter-stage').value;
+      const source = document.getElementById('filter-source').value;
+
+      return state.songs.filter(s => {
+        if (q && !s.title.toLowerCase().includes(q) && !(s.notes || '').toLowerCase().includes(q)) return false;
+        if (source !== 'all' && s.source !== source) return false;
+
+        const isDone = s.steps.fetch && s.steps.simplify && s.steps.audio && s.steps.upload;
+        if (stage === 'completed' && !isDone) return false;
+        if (stage === 'incomplete' && isDone) return false;
+        if (stage === 'need-fetch' && s.steps.fetch) return false;
+        if (stage === 'need-simplify' && (!s.steps.fetch || s.steps.simplify)) return false;
+        if (stage === 'need-audio' && (!s.steps.simplify || s.steps.audio)) return false;
+        if (stage === 'need-upload' && (!s.steps.audio || s.steps.upload)) return false;
+
+        return true;
+      });
+    }
+
+    function renderAll() {
+      updateDashboard();
+      renderSongs();
+    }
+
+    function renderSongs() {
+      const container = document.getElementById('songs-container');
+      const songs = getFilteredSongs();
+
+      if (songs.length === 0) {
+        container.innerHTML = `
+          <div class="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center">
+            <p class="text-sm font-medium text-slate-500">暫無符合條件的曲目紀錄</p>
+            <p class="text-xs text-slate-400 mt-1">在上方輸入歌名即可開始追蹤「攞譜 → 簡化 → 音檔 → 上載」進度</p>
+          </div>`;
+        return;
+      }
+
+      if (state.view === 'board') {
+        renderBoardView(container, songs);
+      } else {
+        renderListView(container, songs);
+      }
+    }
+
+    function renderStepButton(song, key, label) {
+      const active = song.steps[key];
+      return `
+        <button type="button" onclick="toggleStep('${song.id}', '${key}')"
+          class="step-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold border flex items-center gap-1.5 ${
+            active
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+              : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
+          }">
+          <span>${active ? '✓' : '○'}</span>
+          <span>${label}</span>
+        </button>`;
+    }
+
+    function renderListView(container, songs) {
+      container.innerHTML = `
+        <div class="space-y-2.5">
+          ${songs.map(s => {
+            const isDone = s.steps.fetch && s.steps.simplify && s.steps.audio && s.steps.upload;
+            const dateStr = s.createdAt ? new Date(s.createdAt).toLocaleDateString('zh-HK', { month: '2-digit', day: '2-digit' }) : '';
+            return `
+              <div class="bg-white rounded-2xl border ${isDone ? 'border-emerald-200 bg-emerald-50/20' : 'border-slate-200'} p-4 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <h3 class="text-base font-bold ${isDone ? 'text-slate-500 line-through' : 'text-slate-900'} truncate">
+                      ${escapeHtml(s.title)}
+                    </h3>
+                    <span class="px-2 py-0.5 text-[11px] font-semibold rounded-md ${
+                      s.source === 'MuseScore' ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-100 text-slate-600'
+                    }">${escapeHtml(s.source)}</span>
+                    ${dateStr ? `<span class="text-xs text-slate-400">${dateStr}</span>` : ''}
+                  </div>
+                  ${s.notes ? `<p class="text-xs text-slate-500 mt-1 truncate">${escapeHtml(s.notes)}</p>` : ''}
+                </div>
+
+                <div class="flex items-center flex-wrap gap-1.5 sm:gap-2">
+                  ${renderStepButton(s, 'fetch', '1. 攞譜')}
+                  ${renderStepButton(s, 'simplify', '2. 簡化')}
+                  ${renderStepButton(s, 'audio', '3. 音檔')}
+                  ${renderStepButton(s, 'upload', '4. 上載')}
+                  <button type="button" onclick="deleteSong('${s.id}')" title="刪除曲目"
+                    class="ml-1 p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition text-xs">
+                    🗑
+                  </button>
+                </div>
+              </div>`;
+          }).join('')}
+        </div>`;
+    }
+
+    function renderBoardView(container, songs) {
+      const cols = [
+        { title: '1. 待簡化（已攞譜）', items: songs.filter(s => s.steps.fetch && !s.steps.simplify) },
+        { title: '2. 待整音檔', items: songs.filter(s => s.steps.simplify && !s.steps.audio) },
+        { title: '3. 待上載小紅書', items: songs.filter(s => s.steps.audio && !s.steps.upload) },
+        { title: '4. 已完成上載', items: songs.filter(s => s.steps.fetch && s.steps.simplify && s.steps.audio && s.steps.upload) }
+      ];
+
+      container.innerHTML = `
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          ${cols.map(col => `
+            <div class="bg-slate-100/80 rounded-2xl p-3 border border-slate-200/80 flex flex-col gap-2.5">
+              <div class="flex items-center justify-between px-1">
+                <h3 class="text-xs font-bold text-slate-700">${col.title}</h3>
+                <span class="px-2 py-0.5 text-xs font-bold bg-white rounded-full text-slate-600 shadow-2xs">${col.items.length}</span>
+              </div>
+              <div class="space-y-2">
+                ${col.items.map(s => `
+                  <div class="bg-white rounded-xl p-3 border border-slate-200 shadow-2xs space-y-2">
+                    <div class="flex items-start justify-between gap-2">
+                      <span class="text-sm font-bold text-slate-900 leading-snug">${escapeHtml(s.title)}</span>
+                      <button onclick="deleteSong('${s.id}')" class="text-slate-300 hover:text-rose-500 text-xs">✕</button>
+                    </div>
+                    ${s.notes ? `<p class="text-xs text-slate-500">${escapeHtml(s.notes)}</p>` : ''}
+                    <div class="flex flex-wrap gap-1 pt-1">
+                      ${renderStepButton(s, 'fetch', '攞譜')}
+                      ${renderStepButton(s, 'simplify', '簡化')}
+                      ${renderStepButton(s, 'audio', '音檔')}
+                      ${renderStepButton(s, 'upload', '上載')}
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          `).join('')}
+        </div>`;
+    }
+
+    // 彈窗控制
+    function openSettingsModal() {
+      document.getElementById('setting-gas-url').value = state.gasUrl;
+      document.getElementById('setting-workspace-code').value = state.code;
+      document.getElementById('settings-modal').classList.remove('hidden');
+    }
+    function closeSettingsModal() {
+      document.getElementById('settings-modal').classList.add('hidden');
+    }
+    function saveSettings() {
+      const url = document.getElementById('setting-gas-url').value.trim();
+      const code = document.getElementById('setting-workspace-code').value.trim() || DEFAULT_CODE;
+      state.gasUrl = url;
+      state.code = code;
+      localStorage.setItem(STORAGE_KEYS.GAS_URL, url);
+      localStorage.setItem(STORAGE_KEYS.CODE, code);
+      document.getElementById('workspace-label').textContent = code;
+      closeSettingsModal();
+      syncFromCloud(true);
+    }
+
+    function copyShareUrl() {
+      const url = window.location.href;
+      navigator.clipboard?.writeText(url).then(() => {
+        showToast('已複製網站連結，可直接傳送給 Partner');
+      }).catch(() => {
+        prompt('請手動複製以下網址傳給 Partner：', url);
+      });
+    }
+
+    function openBatchModal() {
+      document.getElementById('batch-modal').classList.remove('hidden');
+    }
+    function closeBatchModal() {
+      document.getElementById('batch-modal').classList.add('hidden');
+    }
+    function handleBatchAdd() {
+      const raw = document.getElementById('batch-textarea').value;
+      const source = document.getElementById('batch-source').value;
+      const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+      if (!lines.length) return;
+
+      const existing = new Set(state.songs.map(s => normalizeTitle(s.title)));
+      let added = 0;
+      const now = new Date().toISOString();
+
+      lines.forEach(title => {
+        const norm = normalizeTitle(title);
+        if (norm && !existing.has(norm)) {
+          existing.add(norm);
+          state.songs.unshift({
+            id: 'song_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+            title,
+            source,
+            notes: '',
+            steps: { fetch: true, simplify: false, audio: false, upload: false },
+            createdAt: now,
+            updatedAt: now
+          });
+          added++;
+        }
+      });
+
+      document.getElementById('batch-textarea').value = '';
+      closeBatchModal();
+      showToast(`已成功匯入 ${added} 首新曲目（跳過 ${lines.length - added} 首重覆）`);
+      if (added > 0) pushToCloud();
+    }
+
+    function openBackupModal() {
+      document.getElementById('backup-modal').classList.remove('hidden');
+    }
+    function closeBackupModal() {
+      document.getElementById('backup-modal').classList.add('hidden');
+    }
+    function exportJsonBackup() {
+      const blob = new Blob([JSON.stringify(state.songs, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `xhs-piano-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      showToast('已匯出 JSON 備份檔');
+    }
+    function importJsonBackup(e) {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const imported = JSON.parse(reader.result);
+          if (!Array.isArray(imported)) throw new Error('格式錯誤');
+          const existing = new Set(state.songs.map(s => normalizeTitle(s.title)));
+          let count = 0;
+          imported.forEach(item => {
+            if (item.title && !existing.has(normalizeTitle(item.title))) {
+              existing.add(normalizeTitle(item.title));
+              state.songs.push({
+                id: item.id || 'song_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+                title: String(item.title),
+                source: item.source || 'MuseScore',
+                notes: item.notes || '',
+                steps: {
+                  fetch: toBool(item.steps?.fetch),
+                  simplify: toBool(item.steps?.simplify),
+                  audio: toBool(item.steps?.audio),
+                  upload: toBool(item.steps?.upload)
+                },
+                createdAt: item.createdAt || new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+              });
+              count++;
+            }
+          });
+          closeBackupModal();
+          showToast(`已還原並合併 ${count} 首曲目`);
+          pushToCloud();
+        } catch {
+          showToast('JSON 檔案格式不正確');
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+  </script>
+</body>
+</html>
