@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>小紅書簡譜製作工作流</title>
+  <title>鋼琴譜簡化工作流</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap');
@@ -22,7 +22,7 @@
 </head>
 <body class="min-h-screen flex flex-col">
 
-  <!-- 頂部導航欄 -->
+  <!-- 頂部導航欄（已按要求隱藏右上角「連線設定」按鈕，雙擊空間代碼可喚出） -->
   <header class="bg-white border-b border-slate-200 sticky top-0 z-30">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
       <div class="flex items-center gap-3">
@@ -30,14 +30,15 @@
           ♪
         </div>
         <div>
-          <h1 class="text-base sm:text-lg font-bold text-slate-900 leading-tight">小紅書簡譜工作流</h1>
+          <h1 class="text-base sm:text-lg font-bold text-slate-900 leading-tight">鋼琴譜簡化工作流</h1>
           <div class="flex items-center gap-2 text-xs text-slate-500">
             <span id="sync-indicator" class="inline-flex items-center gap-1.5">
               <span class="w-2 h-2 rounded-full bg-amber-400"></span>
               <span>連線中...</span>
             </span>
             <span>•</span>
-            <span id="workspace-label" class="font-mono text-slate-600">xhs-piano-studio</span>
+            <span id="workspace-label" ondblclick="openSettingsModal()" title="雙擊可檢視連線設定"
+              class="font-mono text-slate-600 cursor-pointer select-none">xhs-piano-studio</span>
           </div>
         </div>
       </div>
@@ -55,10 +56,6 @@
         <button onclick="openBackupModal()"
           class="px-3 py-1.5 text-xs sm:text-sm font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg transition">
           備份
-        </button>
-        <button onclick="openSettingsModal()"
-          class="px-3 py-1.5 text-xs sm:text-sm font-medium text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition">
-          連線設定
         </button>
       </div>
     </div>
@@ -177,12 +174,12 @@
       </form>
     </section>
 
-    <!-- 搜尋、篩選與檢視切換 -->
-    <section class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <!-- 搜尋、篩選、排序與檢視切換 -->
+    <section class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
       <div class="flex flex-wrap items-center gap-2">
         <div class="relative">
           <input type="text" id="search-input" placeholder="搜尋歌名或備註..." oninput="renderSongs()"
-            class="pl-3.5 pr-8 py-1.5 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900 w-52 sm:w-64" />
+            class="pl-3.5 pr-8 py-1.5 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900 w-48 sm:w-56" />
           <button type="button" onclick="clearSearch()" id="clear-search-btn"
             class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs">✕</button>
         </div>
@@ -204,10 +201,19 @@
           <option value="MuseScore">僅限 MuseScore</option>
           <option value="其他來源">其他來源</option>
         </select>
+
+        <!-- 排序功能：按日期 / 按歌名字首 -->
+        <select id="sort-by" onchange="renderSongs()"
+          class="px-3 py-1.5 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900">
+          <option value="date-desc">排序：日期（新→舊）</option>
+          <option value="date-asc">排序：日期（舊→新）</option>
+          <option value="title-asc">排序：歌名字首（A→Z）</option>
+          <option value="title-desc">排序：歌名字首（Z→A）</option>
+        </select>
       </div>
 
       <!-- 三種檢視切換：流程清單 / 進度看板 / 純曲目清單 -->
-      <div class="inline-flex bg-slate-200/80 p-1 rounded-xl self-start sm:self-auto">
+      <div class="inline-flex bg-slate-200/80 p-1 rounded-xl self-start lg:self-auto">
         <button id="view-list-btn" onclick="setView('list')"
           class="px-3 py-1 text-xs font-semibold rounded-lg bg-white text-slate-900 shadow-xs transition">
           流程清單
@@ -228,16 +234,71 @@
 
   </main>
 
-  <!-- 連線設定彈窗 -->
+  <!-- 隱藏式檔案上傳器（用於每首曲目上傳琴譜/音檔至 Google Drive） -->
+  <input type="file" id="song-file-input" multiple class="hidden" onchange="handleSongFileSelected(event)" />
+
+  <!-- 編輯曲目彈窗（支援修改歌名、加入日期、來源、備註及管理已上傳檔案） -->
+  <div id="edit-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-bold text-slate-900">編輯曲目資料</h2>
+        <button onclick="closeEditModal()" class="text-slate-400 hover:text-slate-600 text-lg">✕</button>
+      </div>
+      <form onsubmit="saveSongEdit(event)" class="space-y-3.5">
+        <input type="hidden" id="edit-song-id" />
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">曲目名稱 *</label>
+          <input type="text" id="edit-title" required
+            class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900" />
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">加入日期 *</label>
+            <input type="date" id="edit-date" required
+              class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">琴譜來源</label>
+            <select id="edit-source"
+              class="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-slate-900">
+              <option value="MuseScore">MuseScore（計入配額）</option>
+              <option value="其他來源">其他來源 / 自扒</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">備註 / 調性</label>
+          <input type="text" id="edit-notes" placeholder="例如：C大調、副歌版"
+            class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900" />
+        </div>
+
+        <!-- 已上傳備份檔案管理 -->
+        <div class="border-t border-slate-100 pt-3">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-semibold text-slate-700">Google Drive 備份檔案</span>
+            <button type="button" onclick="triggerUploadFromEditModal()"
+              class="px-2.5 py-1 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition">
+              + 上傳新檔案
+            </button>
+          </div>
+          <div id="edit-files-list" class="space-y-1.5 max-h-36 overflow-y-auto"></div>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" onclick="closeEditModal()" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl">取消</button>
+          <button type="submit" class="px-5 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-xl">儲存變更</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 隱藏式連線設定彈窗（雙擊頂部 xhs-piano-studio 可打開） -->
   <div id="settings-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4">
       <div class="flex items-center justify-between">
         <h2 class="text-lg font-bold text-slate-900">Google Sheets 雲端同步設定</h2>
         <button onclick="closeSettingsModal()" class="text-slate-400 hover:text-slate-600 text-lg">✕</button>
       </div>
-      <p class="text-xs text-slate-500 leading-relaxed">
-        網頁已預先綁定你嘅 Google Sheet 資料庫。你同 Partner 只要打開同一條網站連結並使用相同「協作代碼」，所有改動都會自動寫入 Google Sheet 並雙向同步。
-      </p>
       <div class="space-y-3">
         <div>
           <label class="block text-xs font-semibold text-slate-700 mb-1">Google Apps Script 網頁應用程式網址</label>
@@ -245,14 +306,14 @@
             class="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900" />
         </div>
         <div>
-          <label class="block text-xs font-semibold text-slate-700 mb-1">協作空間代碼（須與 Apps Script 內 SECRET_CODE 一致）</label>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">協作空間代碼</label>
           <input type="text" id="setting-workspace-code"
             class="w-full px-3 py-2 text-sm font-mono border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900" />
         </div>
       </div>
       <div class="flex items-center justify-between pt-2">
         <button onclick="copyShareUrl()" class="text-xs font-semibold text-indigo-600 hover:text-indigo-700">
-          📋 複製目前網站網址傳給 Partner
+          📋 複製網站網址傳給 Partner
         </button>
         <div class="flex gap-2">
           <button onclick="closeSettingsModal()" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl">取消</button>
@@ -292,7 +353,7 @@
         <h2 class="text-lg font-bold text-slate-900">曲庫備份與還原</h2>
         <button onclick="closeBackupModal()" class="text-slate-400 hover:text-slate-600 text-lg">✕</button>
       </div>
-      <p class="text-xs text-slate-500">除咗自動儲存於 Google Sheet 外，你亦可以隨時匯出本機 JSON 備份檔。</p>
+      <p class="text-xs text-slate-500">所有曲目與 Drive 檔案連結均已自動儲存於 Google Sheet，你亦可以隨時匯出本機 JSON 備份檔。</p>
       <div class="space-y-3 pt-1">
         <button onclick="exportJsonBackup()"
           class="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl transition">
@@ -326,7 +387,8 @@
       code: localStorage.getItem(STORAGE_KEYS.CODE) || DEFAULT_CODE,
       songs: [],
       view: 'list',
-      isSyncing: false
+      isSyncing: false,
+      uploadingSongId: null
     };
 
     document.addEventListener('DOMContentLoaded', () => {
@@ -351,7 +413,7 @@
       el.textContent = msg;
       el.classList.remove('opacity-0');
       clearTimeout(el._timer);
-      el._timer = setTimeout(() => el.classList.add('opacity-0'), 2600);
+      el._timer = setTimeout(() => el.classList.add('opacity-0'), 2800);
     }
 
     function setSyncStatus(status, text) {
@@ -366,6 +428,19 @@
 
     function toBool(val) {
       return val === true || val === 'true' || val === 'TRUE' || val === 1 || val === '1';
+    }
+
+    function parseFilesField(raw) {
+      if (Array.isArray(raw)) return raw;
+      if (typeof raw === 'string' && raw.trim()) {
+        try {
+          const parsed = JSON.parse(raw);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [];
+        }
+      }
+      return [];
     }
 
     async function syncFromCloud(showFeedback = false) {
@@ -399,7 +474,8 @@
               upload: toBool(item.step4)
             },
             createdAt: item.createdAt || new Date().toISOString(),
-            updatedAt: item.updatedAt || new Date().toISOString()
+            updatedAt: item.updatedAt || new Date().toISOString(),
+            files: parseFilesField(item.files)
           })).filter(s => s.title);
 
           localStorage.setItem(STORAGE_KEYS.SONGS, JSON.stringify(state.songs));
@@ -410,7 +486,7 @@
       } catch (err) {
         console.error(err);
         setSyncStatus('error', '離線（使用本機快取）');
-        if (showFeedback) showToast('無法連線至 Google Sheet，請檢查網址或權限');
+        if (showFeedback) showToast('無法連線至 Google Sheet，請檢查權限');
       } finally {
         state.isSyncing = false;
         if (refreshIcon) refreshIcon.classList.remove('animate-spin');
@@ -504,7 +580,8 @@
           upload: false
         },
         createdAt: now,
-        updatedAt: now
+        updatedAt: now,
+        files: []
       };
 
       state.songs.unshift(newSong);
@@ -531,6 +608,172 @@
       state.songs = state.songs.filter(s => s.id !== songId);
       showToast(`已刪除「${song.title}」`);
       pushToCloud();
+    }
+
+    // 編輯曲目功能（支援修改歌名、加入日期、來源、備註及已上傳檔案）
+    function toLocalInputDate(isoStr) {
+      const d = isoStr ? new Date(isoStr) : new Date();
+      if (isNaN(d)) return new Date().toISOString().slice(0, 10);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+
+    function openEditModal(songId) {
+      const song = state.songs.find(s => s.id === songId);
+      if (!song) return;
+      document.getElementById('edit-song-id').value = song.id;
+      document.getElementById('edit-title').value = song.title;
+      document.getElementById('edit-date').value = toLocalInputDate(song.createdAt);
+      document.getElementById('edit-source').value = song.source || 'MuseScore';
+      document.getElementById('edit-notes').value = song.notes || '';
+      renderEditModalFiles(song);
+      document.getElementById('edit-modal').classList.remove('hidden');
+    }
+
+    function closeEditModal() {
+      document.getElementById('edit-modal').classList.add('hidden');
+    }
+
+    function renderEditModalFiles(song) {
+      const box = document.getElementById('edit-files-list');
+      const files = song.files || [];
+      if (files.length === 0) {
+        box.innerHTML = `<p class="text-xs text-slate-400 py-1">尚未上傳任何琴譜或音檔備份</p>`;
+        return;
+      }
+      box.innerHTML = files.map((f, idx) => `
+        <div class="flex items-center justify-between gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 text-xs">
+          <a href="${escapeHtml(f.url)}" target="_blank" rel="noopener noreferrer"
+            class="text-indigo-600 hover:underline font-medium truncate">
+            📎 ${escapeHtml(f.name)}
+          </a>
+          <button type="button" onclick="removeAttachedFile('${song.id}', ${idx})"
+            class="text-slate-400 hover:text-rose-600 shrink-0 px-1" title="移除此檔案連結">✕</button>
+        </div>
+      `).join('');
+    }
+
+    function removeAttachedFile(songId, fileIdx) {
+      const song = state.songs.find(s => s.id === songId);
+      if (!song || !Array.isArray(song.files)) return;
+      if (!confirm('確定要從此曲目移除該檔案連結？')) return;
+      song.files.splice(fileIdx, 1);
+      song.updatedAt = new Date().toISOString();
+      renderEditModalFiles(song);
+      pushToCloud();
+    }
+
+    function saveSongEdit(e) {
+      e.preventDefault();
+      const id = document.getElementById('edit-song-id').value;
+      const song = state.songs.find(s => s.id === id);
+      if (!song) return;
+
+      const newTitle = document.getElementById('edit-title').value.trim();
+      const dateVal = document.getElementById('edit-date').value;
+      const newSource = document.getElementById('edit-source').value;
+      const newNotes = document.getElementById('edit-notes').value.trim();
+
+      if (!newTitle) return;
+
+      song.title = newTitle;
+      song.source = newSource;
+      song.notes = newNotes;
+
+      if (dateVal) {
+        const [y, m, d] = dateVal.split('-').map(Number);
+        const localDate = new Date(y, m - 1, d, 12, 0, 0);
+        song.createdAt = localDate.toISOString();
+      }
+
+      song.updatedAt = new Date().toISOString();
+      closeEditModal();
+      showToast(`已更新「${newTitle}」`);
+      pushToCloud();
+    }
+
+    // 單曲上傳檔案至 Google Drive 備份
+    function triggerSongFileUpload(songId) {
+      state.uploadingSongId = songId;
+      const input = document.getElementById('song-file-input');
+      input.value = '';
+      input.click();
+    }
+
+    function triggerUploadFromEditModal() {
+      const songId = document.getElementById('edit-song-id').value;
+      if (songId) triggerSongFileUpload(songId);
+    }
+
+    function readFileAsBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = String(reader.result || '');
+          const base64 = result.includes(',') ? result.split(',')[1] : result;
+          resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function handleSongFileSelected(e) {
+      const files = Array.from(e.target.files || []);
+      const songId = state.uploadingSongId;
+      if (!files.length || !songId) return;
+
+      const song = state.songs.find(s => s.id === songId);
+      if (!song) return;
+      if (!Array.isArray(song.files)) song.files = [];
+
+      for (const file of files) {
+        if (file.size > 25 * 1024 * 1024) {
+          showToast(`「${file.name}」超過 25MB 上限，已跳過`);
+          continue;
+        }
+
+        setSyncStatus('syncing', `正在上傳 ${file.name} 至 Drive...`);
+        showToast(`正在上傳「${file.name}」至 Google Drive...`);
+
+        try {
+          const base64Data = await readFileAsBase64(file);
+          const res = await fetch(state.gasUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({
+              code: state.code,
+              action: 'uploadFile',
+              songId: song.id,
+              songTitle: song.title,
+              fileName: file.name,
+              mimeType: file.type || 'application/octet-stream',
+              base64Data
+            })
+          });
+          const data = await res.json();
+
+          if (data.status === 'ok' && data.file) {
+            song.files.push(data.file);
+            song.updatedAt = new Date().toISOString();
+            showToast(`✅ 「${file.name}」已備份至 Google Drive`);
+            if (!document.getElementById('edit-modal').classList.contains('hidden')) {
+              renderEditModalFiles(song);
+            }
+          } else {
+            showToast(`上傳失敗：${data.error || '請確認 Apps Script 已更新並授權 Drive'}`);
+            setSyncStatus('error', '檔案上傳失敗');
+          }
+        } catch (err) {
+          console.error(err);
+          showToast(`上傳「${file.name}」時發生連線錯誤`);
+          setSyncStatus('error', '檔案上傳失敗');
+        }
+      }
+
+      await pushToCloud();
     }
 
     function getQuotaOffsets() {
@@ -560,8 +803,8 @@
 
     function updateDashboard() {
       const now = new Date();
-      const todayStr = now.toISOString().slice(0, 10);
-      const monthStr = now.toISOString().slice(0, 7);
+      const todayStr = toLocalInputDate(now.toISOString());
+      const monthStr = todayStr.slice(0, 7);
 
       let autoDaily = 0;
       let autoMonthly = 0;
@@ -572,12 +815,9 @@
           completed++;
         }
         if (s.source === 'MuseScore' && s.steps.fetch && s.createdAt) {
-          const d = new Date(s.createdAt);
-          if (!isNaN(d)) {
-            const localDate = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString();
-            if (localDate.startsWith(todayStr)) autoDaily++;
-            if (localDate.startsWith(monthStr)) autoMonthly++;
-          }
+          const itemDateStr = toLocalInputDate(s.createdAt);
+          if (itemDateStr === todayStr) autoDaily++;
+          if (itemDateStr.startsWith(monthStr)) autoMonthly++;
         }
       });
 
@@ -640,14 +880,15 @@
       renderSongs();
     }
 
-    function getFilteredSongs() {
+    function getFilteredAndSortedSongs() {
       const q = document.getElementById('search-input').value.trim().toLowerCase();
       document.getElementById('clear-search-btn').classList.toggle('hidden', !q);
 
       const stage = document.getElementById('filter-stage').value;
       const source = document.getElementById('filter-source').value;
+      const sortBy = document.getElementById('sort-by').value;
 
-      return state.songs.filter(s => {
+      const filtered = state.songs.filter(s => {
         if (q && !s.title.toLowerCase().includes(q) && !(s.notes || '').toLowerCase().includes(q)) return false;
         if (source !== 'all' && s.source !== source) return false;
 
@@ -661,6 +902,20 @@
 
         return true;
       });
+
+      return filtered.sort((a, b) => {
+        if (sortBy === 'date-asc') {
+          return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
+        }
+        if (sortBy === 'title-asc') {
+          return a.title.localeCompare(b.title, 'zh-Hant-HK', { numeric: true, sensitivity: 'base' });
+        }
+        if (sortBy === 'title-desc') {
+          return b.title.localeCompare(a.title, 'zh-Hant-HK', { numeric: true, sensitivity: 'base' });
+        }
+        // 預設 date-desc：最新優先
+        return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+      });
     }
 
     function renderAll() {
@@ -670,7 +925,7 @@
 
     function renderSongs() {
       const container = document.getElementById('songs-container');
-      const songs = getFilteredSongs();
+      const songs = getFilteredAndSortedSongs();
 
       if (songs.length === 0) {
         container.innerHTML = `
@@ -704,6 +959,22 @@
         </button>`;
     }
 
+    function renderFileBadges(song) {
+      const files = song.files || [];
+      if (!files.length) return '';
+      return `
+        <div class="flex flex-wrap items-center gap-1.5 mt-2">
+          ${files.map(f => `
+            <a href="${escapeHtml(f.url)}" target="_blank" rel="noopener noreferrer"
+              title="點擊開啟或下載備份檔案：${escapeHtml(f.name)}"
+              class="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-md bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100 transition max-w-[200px]">
+              <span>📎</span>
+              <span class="truncate">${escapeHtml(f.name)}</span>
+            </a>
+          `).join('')}
+        </div>`;
+    }
+
     function renderListView(container, songs) {
       container.innerHTML = `
         <div class="space-y-2.5">
@@ -720,9 +991,10 @@
                     <span class="px-2 py-0.5 text-[11px] font-semibold rounded-md ${
                       s.source === 'MuseScore' ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-100 text-slate-600'
                     }">${escapeHtml(s.source)}</span>
-                    ${dateStr ? `<span class="text-xs text-slate-400">${dateStr}</span>` : ''}
+                    ${dateStr ? `<span class="text-xs text-slate-400 font-mono">${dateStr}</span>` : ''}
                   </div>
                   ${s.notes ? `<p class="text-xs text-slate-500 mt-1 truncate">${escapeHtml(s.notes)}</p>` : ''}
+                  ${renderFileBadges(s)}
                 </div>
 
                 <div class="flex items-center flex-wrap gap-1.5 sm:gap-2">
@@ -730,8 +1002,19 @@
                   ${renderStepButton(s, 'simplify', '2. 簡化')}
                   ${renderStepButton(s, 'audio', '3. 音檔')}
                   ${renderStepButton(s, 'upload', '4. 上載')}
+
+                  <div class="h-4 w-px bg-slate-200 mx-0.5 hidden sm:block"></div>
+
+                  <button type="button" onclick="triggerSongFileUpload('${s.id}')" title="上傳琴譜或音檔至 Google Drive 備份"
+                    class="px-2 py-1.5 text-xs font-medium text-slate-600 hover:text-sky-700 bg-slate-50 hover:bg-sky-50 border border-slate-200 rounded-lg transition">
+                    📎 備份檔
+                  </button>
+                  <button type="button" onclick="openEditModal('${s.id}')" title="編輯歌名、加入日期與備註"
+                    class="p-1.5 text-slate-500 hover:text-slate-900 rounded-lg hover:bg-slate-100 transition text-xs">
+                    ✎
+                  </button>
                   <button type="button" onclick="deleteSong('${s.id}')" title="刪除曲目"
-                    class="ml-1 p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition text-xs">
+                    class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition text-xs">
                     🗑
                   </button>
                 </div>
@@ -744,7 +1027,7 @@
       const cols = [
         { title: '1. 待簡化（已攞譜）', items: songs.filter(s => s.steps.fetch && !s.steps.simplify) },
         { title: '2. 待整音檔', items: songs.filter(s => s.steps.simplify && !s.steps.audio) },
-        { title: '3. 待上載小紅書', items: songs.filter(s => s.steps.audio && !s.steps.upload) },
+        { title: '3. 待上載發佈', items: songs.filter(s => s.steps.audio && !s.steps.upload) },
         { title: '4. 已完成上載', items: songs.filter(s => s.steps.fetch && s.steps.simplify && s.steps.audio && s.steps.upload) }
       ];
 
@@ -761,9 +1044,14 @@
                   <div class="bg-white rounded-xl p-3 border border-slate-200 shadow-2xs space-y-2">
                     <div class="flex items-start justify-between gap-2">
                       <span class="text-sm font-bold text-slate-900 leading-snug">${escapeHtml(s.title)}</span>
-                      <button onclick="deleteSong('${s.id}')" class="text-slate-300 hover:text-rose-500 text-xs">✕</button>
+                      <div class="flex items-center gap-1 shrink-0">
+                        <button onclick="triggerSongFileUpload('${s.id}')" title="上傳備份檔" class="text-slate-400 hover:text-sky-600 text-xs">📎</button>
+                        <button onclick="openEditModal('${s.id}')" title="編輯" class="text-slate-400 hover:text-slate-800 text-xs">✎</button>
+                        <button onclick="deleteSong('${s.id}')" title="刪除" class="text-slate-300 hover:text-rose-500 text-xs">✕</button>
+                      </div>
                     </div>
                     ${s.notes ? `<p class="text-xs text-slate-500">${escapeHtml(s.notes)}</p>` : ''}
+                    ${renderFileBadges(s)}
                     <div class="flex flex-wrap gap-1 pt-1">
                       ${renderStepButton(s, 'fetch', '攞譜')}
                       ${renderStepButton(s, 'simplify', '簡化')}
@@ -778,7 +1066,6 @@
         </div>`;
     }
 
-    // 純曲目清單看板（極簡高密度曲庫總覽）
     function renderCatalogView(container, songs) {
       container.innerHTML = `
         <div class="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
@@ -797,6 +1084,7 @@
               const isDone = s.steps.fetch && s.steps.simplify && s.steps.audio && s.steps.upload;
               const stageLabel = getStageLabel(s);
               const dateStr = s.createdAt ? new Date(s.createdAt).toLocaleDateString('zh-HK', { month: '2-digit', day: '2-digit' }) : '';
+              const fileCount = (s.files || []).length;
               return `
                 <div class="px-5 py-3 flex items-center justify-between gap-3 hover:bg-slate-50/70 transition">
                   <div class="flex items-center gap-3 min-w-0">
@@ -804,7 +1092,8 @@
                     <span class="text-sm font-semibold text-slate-900 truncate">${escapeHtml(s.title)}</span>
                     ${s.notes ? `<span class="hidden sm:inline text-xs text-slate-400 truncate">— ${escapeHtml(s.notes)}</span>` : ''}
                   </div>
-                  <div class="flex items-center gap-2.5 shrink-0">
+                  <div class="flex items-center gap-2 shrink-0">
+                    ${fileCount > 0 ? `<span class="px-1.5 py-0.5 text-[11px] font-medium rounded-md bg-sky-50 text-sky-700">📎 ${fileCount}</span>` : ''}
                     <span class="px-2 py-0.5 text-[11px] font-medium rounded-md ${
                       s.source === 'MuseScore' ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-100 text-slate-600'
                     }">${escapeHtml(s.source)}</span>
@@ -812,6 +1101,8 @@
                     <span class="px-2 py-0.5 text-[11px] font-semibold rounded-md ${
                       isDone ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
                     }">${stageLabel}</span>
+                    <button type="button" onclick="openEditModal('${s.id}')" title="編輯曲目"
+                      class="p-1 text-slate-400 hover:text-slate-800 text-xs">✎</button>
                   </div>
                 </div>`;
             }).join('')}
@@ -820,7 +1111,7 @@
     }
 
     function copyAllCatalogTitles() {
-      const songs = getFilteredSongs();
+      const songs = getFilteredAndSortedSongs();
       if (!songs.length) return;
       const text = songs.map((s, i) => `${i + 1}. ${s.title}`).join('\n');
       navigator.clipboard?.writeText(text).then(() => {
@@ -886,7 +1177,8 @@
             notes: '',
             steps: { fetch: true, simplify: false, audio: false, upload: false },
             createdAt: now,
-            updatedAt: now
+            updatedAt: now,
+            files: []
           });
           added++;
         }
@@ -908,7 +1200,7 @@
       const blob = new Blob([JSON.stringify(state.songs, null, 2)], { type: 'application/json' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = `xhs-piano-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `piano-workflow-backup-${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       showToast('已匯出 JSON 備份檔');
     }
@@ -937,7 +1229,8 @@
                   upload: toBool(item.steps?.upload)
                 },
                 createdAt: item.createdAt || new Date().toISOString(),
-                updatedAt: new Date().toISOString()
+                updatedAt: new Date().toISOString(),
+                files: Array.isArray(item.files) ? item.files : []
               });
               count++;
             }
