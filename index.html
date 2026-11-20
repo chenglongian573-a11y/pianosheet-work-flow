@@ -49,6 +49,10 @@
           <span id="refresh-icon">↻</span>
           <span class="hidden sm:inline">立即同步</span>
         </button>
+        <button onclick="openCategoryModal()"
+          class="px-3 py-1.5 text-xs sm:text-sm font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg transition">
+          分類管理
+        </button>
         <button onclick="openBatchModal()"
           class="px-3 py-1.5 text-xs sm:text-sm font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg transition">
           批量加歌
@@ -61,7 +65,7 @@
     </div>
   </header>
 
-  <main class="max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 space-y-6 flex-1">
+  <main class="max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 space-y-5 flex-1">
 
     <!-- 儀表板：MuseScore 配額與總進度 -->
     <section class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -134,17 +138,24 @@
     <section class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
       <form id="add-song-form" onsubmit="handleAddSong(event)" class="space-y-3">
         <div class="grid grid-cols-1 sm:grid-cols-12 gap-3">
-          <div class="sm:col-span-5">
+          <div class="sm:col-span-4">
             <label class="block text-xs font-semibold text-slate-600 mb-1">曲目名稱 *</label>
-            <input type="text" id="song-title" required placeholder="輸入歌名（自動檢查是否重覆攞譜）"
-              oninput="checkDuplicateTitle(this.value)"
+            <input type="text" id="song-title" required placeholder="輸入歌名（自動檢查重覆與分類）"
+              oninput="onSongTitleInput(this.value)"
               class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900" />
           </div>
-          <div class="sm:col-span-3">
+          <div class="sm:col-span-2">
+            <label class="block text-xs font-semibold text-slate-600 mb-1">分類（選填）</label>
+            <select id="song-category" onchange="markCategoryManual()"
+              class="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-slate-900">
+              <option value="">無分類</option>
+            </select>
+          </div>
+          <div class="sm:col-span-2">
             <label class="block text-xs font-semibold text-slate-600 mb-1">琴譜來源</label>
             <select id="song-source"
               class="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-slate-900">
-              <option value="MuseScore">MuseScore（計入配額）</option>
+              <option value="MuseScore">MuseScore（計配額）</option>
               <option value="其他來源">其他來源 / 自扒</option>
             </select>
           </div>
@@ -170,12 +181,15 @@
       </form>
     </section>
 
+    <!-- 分類數量統計與一鍵篩選列 -->
+    <section id="category-stats-bar" class="bg-white rounded-2xl border border-slate-200 px-4 py-3 shadow-2xs flex flex-wrap items-center gap-2"></section>
+
     <!-- 搜尋、篩選、排序與檢視切換 -->
     <section class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
       <div class="flex flex-wrap items-center gap-2">
         <div class="relative">
           <input type="text" id="search-input" placeholder="搜尋歌名或備註..." oninput="renderSongs()"
-            class="pl-3.5 pr-8 py-1.5 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900 w-48 sm:w-56" />
+            class="pl-3.5 pr-8 py-1.5 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900 w-44 sm:w-52" />
           <button type="button" onclick="clearSearch()" id="clear-search-btn"
             class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs">✕</button>
         </div>
@@ -229,6 +243,32 @@
 
   <input type="file" id="song-file-input" multiple class="hidden" onchange="handleSongFileSelected(event)" />
 
+  <!-- 自訂分類管理彈窗 -->
+  <div id="category-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-bold text-slate-900">自訂曲目分類</h2>
+        <button onclick="closeCategoryModal()" class="text-slate-400 hover:text-slate-600 text-lg">✕</button>
+      </div>
+      <p class="text-xs text-slate-500">建立分類（例如 Ghibli、YOASOBI、原神、華語歌）後，可統計每個分類已收錄多少首歌，並支援與 Partner 雲端同步。</p>
+
+      <form onsubmit="handleAddCategory(event)" class="flex gap-2">
+        <input type="text" id="new-category-input" required placeholder="輸入新分類名稱..."
+          class="flex-1 px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900" />
+        <button type="submit"
+          class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl whitespace-nowrap transition">
+          + 新增分類
+        </button>
+      </form>
+
+      <div id="category-manage-list" class="space-y-1.5 max-h-60 overflow-y-auto pt-1"></div>
+
+      <div class="flex justify-end pt-2 border-t border-slate-100">
+        <button type="button" onclick="closeCategoryModal()" class="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl">完成</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 編輯曲目彈窗 -->
   <div id="edit-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4">
@@ -243,17 +283,24 @@
           <input type="text" id="edit-title" required
             class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900" />
         </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">曲目分類</label>
+            <select id="edit-category"
+              class="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-slate-900">
+              <option value="">無分類</option>
+            </select>
+          </div>
           <div>
             <label class="block text-xs font-semibold text-slate-700 mb-1">加入日期 *</label>
             <input type="date" id="edit-date" required
-              class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900" />
+              class="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900" />
           </div>
           <div>
             <label class="block text-xs font-semibold text-slate-700 mb-1">琴譜來源</label>
             <select id="edit-source"
               class="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-slate-900">
-              <option value="MuseScore">MuseScore（計入配額）</option>
+              <option value="MuseScore">MuseScore</option>
               <option value="其他來源">其他來源 / 自扒</option>
             </select>
           </div>
@@ -324,11 +371,16 @@
       <p class="text-xs text-slate-500">每行輸入一首歌名，系統會自動跳過曲庫內已存在的重覆歌名：</p>
       <textarea id="batch-textarea" rows="6" placeholder="晴天&#10;稻香&#10;江南&#10;起風了"
         class="w-full p-3 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900"></textarea>
-      <div class="flex items-center justify-between">
-        <select id="batch-source" class="px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white">
-          <option value="MuseScore">來源：MuseScore</option>
-          <option value="其他來源">來源：其他來源</option>
-        </select>
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="flex items-center gap-2">
+          <select id="batch-category" class="px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white">
+            <option value="">分類：無分類</option>
+          </select>
+          <select id="batch-source" class="px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white">
+            <option value="MuseScore">來源：MuseScore</option>
+            <option value="其他來源">來源：其他來源</option>
+          </select>
+        </div>
         <div class="flex gap-2">
           <button onclick="closeBatchModal()" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl">取消</button>
           <button onclick="handleBatchAdd()" class="px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-xl">確認匯入</button>
@@ -344,7 +396,7 @@
         <h2 class="text-lg font-bold text-slate-900">曲庫維護與備份</h2>
         <button onclick="closeBackupModal()" class="text-slate-400 hover:text-slate-600 text-lg">✕</button>
       </div>
-      <p class="text-xs text-slate-500">所有曲目與 Drive 檔案連結均已自動儲存於 Google Sheet。你亦可以在此清理重複紀錄或匯出備份。</p>
+      <p class="text-xs text-slate-500">所有曲目、分類與 Drive 檔案連結均已自動儲存於 Google Sheet。你亦可以在此清理重複紀錄或匯出備份。</p>
       <div class="space-y-3 pt-1">
         <button onclick="cleanDuplicateSongs()"
           class="w-full py-2.5 px-4 bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold rounded-xl transition shadow-xs">
@@ -373,6 +425,7 @@
       GAS_URL: 'xhs_wf_gas_url',
       CODE: 'xhs_wf_code',
       SONGS: 'xhs_wf_songs_cache',
+      CATEGORIES: 'xhs_wf_categories_cache',
       QUOTA_OFFSETS: 'xhs_wf_quota_offsets'
     };
 
@@ -380,6 +433,8 @@
       gasUrl: localStorage.getItem(STORAGE_KEYS.GAS_URL) || DEFAULT_GAS_URL,
       code: localStorage.getItem(STORAGE_KEYS.CODE) || DEFAULT_CODE,
       songs: [],
+      categories: [],
+      selectedCategory: 'all',
       view: 'list',
       isSyncing: false,
       isPushing: false,
@@ -387,19 +442,25 @@
       uploadingSongId: null,
       isComposing: false,
       lastAddedTitle: '',
-      lastAddedTime: 0
+      lastAddedTime: 0,
+      categoryManuallyChosen: false
     };
 
     document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('workspace-label').textContent = state.code;
       try {
-        const cached = JSON.parse(localStorage.getItem(STORAGE_KEYS.SONGS) || '[]');
-        if (Array.isArray(cached)) state.songs = cached;
+        const cachedSongs = JSON.parse(localStorage.getItem(STORAGE_KEYS.SONGS) || '[]');
+        if (Array.isArray(cachedSongs)) state.songs = cachedSongs;
+        const cachedCats = JSON.parse(localStorage.getItem(STORAGE_KEYS.CATEGORIES) || '[]');
+        if (Array.isArray(cachedCats)) state.categories = cachedCats;
       } catch (e) {}
 
       const titleInput = document.getElementById('song-title');
       titleInput.addEventListener('compositionstart', () => { state.isComposing = true; });
-      titleInput.addEventListener('compositionend', () => { state.isComposing = false; });
+      titleInput.addEventListener('compositionend', () => {
+        state.isComposing = false;
+        onSongTitleInput(titleInput.value);
+      });
 
       renderAll();
       syncFromCloud(false);
@@ -471,6 +532,7 @@
             title: String(item.title || '').trim(),
             source: String(item.source || 'MuseScore'),
             notes: String(item.notes || ''),
+            category: String(item.category || '').trim(),
             steps: {
               fetch: toBool(item.step1),
               simplify: toBool(item.step2),
@@ -486,7 +548,18 @@
             return true;
           });
 
+          const catSet = new Set(Array.isArray(data.categories) ? data.categories.map(c => String(c || '').trim()).filter(Boolean) : []);
+          state.songs.forEach(s => {
+            if (s.category) catSet.add(s.category);
+          });
+          state.categories = Array.from(catSet);
+
+          if (state.selectedCategory !== 'all' && state.selectedCategory !== '__uncategorized__' && !state.categories.includes(state.selectedCategory)) {
+            state.selectedCategory = 'all';
+          }
+
           localStorage.setItem(STORAGE_KEYS.SONGS, JSON.stringify(state.songs));
+          localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(state.categories));
           renderAll();
           setSyncStatus('ok', '已與 Google Sheet 同步');
           if (showFeedback) showToast(`已同步最新資料（共 ${state.songs.length} 首）`);
@@ -503,6 +576,7 @@
 
     async function pushToCloud() {
       localStorage.setItem(STORAGE_KEYS.SONGS, JSON.stringify(state.songs));
+      localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(state.categories));
       renderAll();
 
       if (!state.gasUrl) return;
@@ -520,7 +594,8 @@
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({
             code: state.code,
-            songs: state.songs
+            songs: state.songs,
+            categories: state.categories
           })
         });
         const data = await res.json();
@@ -543,7 +618,6 @@
       }
     }
 
-    // 同步將指定檔案移至 Google Drive 垃圾桶
     async function deleteDriveFiles(fileIds) {
       if (!state.gasUrl || !Array.isArray(fileIds) || fileIds.length === 0) return;
       try {
@@ -563,6 +637,28 @@
 
     function normalizeTitle(str) {
       return str.toLowerCase().replace(/[\s\-_（）()【】\[\]《》'"’“.,，。!！?？]/g, '');
+    }
+
+    function markCategoryManual() {
+      state.categoryManuallyChosen = true;
+    }
+
+    function onSongTitleInput(inputVal) {
+      checkDuplicateTitle(inputVal);
+
+      // 若未手動指定分類，歌名包含現有分類名稱時自動預選
+      const catSelect = document.getElementById('song-category');
+      if (!catSelect) return;
+      if (!inputVal.trim()) {
+        state.categoryManuallyChosen = false;
+        catSelect.value = '';
+        return;
+      }
+      if (!state.categoryManuallyChosen && state.categories.length > 0) {
+        const lowerTitle = inputVal.toLowerCase();
+        const matchedCat = state.categories.find(c => lowerTitle.includes(c.toLowerCase()));
+        catSelect.value = matchedCat || '';
+      }
     }
 
     function checkDuplicateTitle(inputVal) {
@@ -588,7 +684,8 @@
       list.innerHTML = matches.map(m => {
         const dateStr = m.createdAt ? new Date(m.createdAt).toLocaleDateString('zh-HK') : '未知日期';
         const stageText = getStageLabel(m);
-        return `<li><strong>${escapeHtml(m.title)}</strong>（${escapeHtml(m.source)} • ${dateStr} 登記 • 目前進度：${stageText}）</li>`;
+        const catText = m.category ? ` • 分類：${escapeHtml(m.category)}` : '';
+        return `<li><strong>${escapeHtml(m.title)}</strong>（${escapeHtml(m.source)}${catText} • ${dateStr} 登記 • 目前進度：${stageText}）</li>`;
       }).join('');
       box.classList.remove('hidden');
     }
@@ -598,6 +695,7 @@
       if (state.isComposing) return;
 
       const titleInput = document.getElementById('song-title');
+      const categoryInput = document.getElementById('song-category');
       const sourceInput = document.getElementById('song-source');
       const notesInput = document.getElementById('song-notes');
       const addBtn = document.getElementById('add-song-btn');
@@ -617,9 +715,11 @@
       setTimeout(() => { addBtn.disabled = false; }, 800);
 
       const now = new Date().toISOString();
+      const chosenCategory = categoryInput.value.trim();
       const newSong = {
         id: 'song_' + nowMs + '_' + Math.random().toString(36).slice(2, 7),
         title,
+        category: chosenCategory,
         source: sourceInput.value,
         notes: notesInput.value.trim(),
         steps: {
@@ -636,9 +736,194 @@
       state.songs.unshift(newSong);
       titleInput.value = '';
       notesInput.value = '';
+      categoryInput.value = '';
+      state.categoryManuallyChosen = false;
       document.getElementById('duplicate-warning').classList.add('hidden');
 
-      showToast(`已新增「${title}」`);
+      showToast(chosenCategory ? `已新增「${title}」（分類：${chosenCategory}）` : `已新增「${title}」`);
+      pushToCloud();
+    }
+
+    // 自訂分類管理與統計
+    function updateCategorySelectOptions() {
+      const addSel = document.getElementById('song-category');
+      const editSel = document.getElementById('edit-category');
+      const batchSel = document.getElementById('batch-category');
+
+      const currentAdd = addSel ? addSel.value : '';
+      const currentEdit = editSel ? editSel.value : '';
+      const currentBatch = batchSel ? batchSel.value : '';
+
+      const optionsHtml = state.categories.map(c =>
+        `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`
+      ).join('');
+
+      if (addSel) {
+        addSel.innerHTML = `<option value="">無分類</option>${optionsHtml}`;
+        if (state.categories.includes(currentAdd)) addSel.value = currentAdd;
+      }
+      if (editSel) {
+        editSel.innerHTML = `<option value="">無分類</option>${optionsHtml}`;
+        if (state.categories.includes(currentEdit)) editSel.value = currentEdit;
+      }
+      if (batchSel) {
+        batchSel.innerHTML = `<option value="">分類：無分類</option>${state.categories.map(c =>
+          `<option value="${escapeHtml(c)}">分類：${escapeHtml(c)}</option>`
+        ).join('')}`;
+        if (state.categories.includes(currentBatch)) batchSel.value = currentBatch;
+      }
+    }
+
+    function renderCategoryStatsBar() {
+      const bar = document.getElementById('category-stats-bar');
+      if (!bar) return;
+
+      const counts = {};
+      let uncategorizedCount = 0;
+
+      state.songs.forEach(s => {
+        const cat = (s.category || '').trim();
+        if (cat) {
+          counts[cat] = (counts[cat] || 0) + 1;
+        } else {
+          uncategorizedCount++;
+        }
+      });
+
+      const activeBtnClass = 'bg-slate-900 text-white border-slate-900 shadow-2xs';
+      const inactiveBtnClass = 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100';
+
+      let html = `
+        <span class="text-xs font-semibold text-slate-400 mr-1">分類統計：</span>
+        <button type="button" onclick="selectCategoryEncoded('all')"
+          class="px-2.5 py-1 text-xs font-semibold rounded-lg border transition ${
+            state.selectedCategory === 'all' ? activeBtnClass : inactiveBtnClass
+          }">
+          全部 <span class="opacity-75">(${state.songs.length})</span>
+        </button>`;
+
+      state.categories.forEach(cat => {
+        const count = counts[cat] || 0;
+        const isActive = state.selectedCategory === cat;
+        const encoded = encodeURIComponent(cat);
+        html += `
+          <button type="button" onclick="selectCategoryEncoded('${encoded}')"
+            class="px-2.5 py-1 text-xs font-semibold rounded-lg border transition ${
+              isActive ? activeBtnClass : inactiveBtnClass
+            }">
+            ${escapeHtml(cat)} <span class="${isActive ? 'text-violet-200' : 'text-violet-600 font-bold'}">(${count})</span>
+          </button>`;
+      });
+
+      if (state.categories.length > 0 && uncategorizedCount > 0) {
+        const isUncatActive = state.selectedCategory === '__uncategorized__';
+        html += `
+          <button type="button" onclick="selectCategoryEncoded('__uncategorized__')"
+            class="px-2.5 py-1 text-xs font-medium rounded-lg border transition ${
+              isUncatActive ? activeBtnClass : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+            }">
+            未分類 <span class="opacity-75">(${uncategorizedCount})</span>
+          </button>`;
+      }
+
+      html += `
+        <button type="button" onclick="openCategoryModal()"
+          class="ml-auto px-2.5 py-1 text-xs font-semibold text-violet-700 bg-violet-50 hover:bg-violet-100 border border-violet-200 rounded-lg transition">
+          + 管理分類
+        </button>`;
+
+      bar.innerHTML = html;
+    }
+
+    function selectCategoryEncoded(encodedCat) {
+      const cat = encodedCat === 'all' || encodedCat === '__uncategorized__'
+        ? encodedCat
+        : decodeURIComponent(encodedCat);
+
+      state.selectedCategory = (state.selectedCategory === cat && cat !== 'all') ? 'all' : cat;
+      renderCategoryStatsBar();
+      renderSongs();
+    }
+
+    function openCategoryModal() {
+      renderCategoryManageList();
+      document.getElementById('category-modal').classList.remove('hidden');
+      setTimeout(() => document.getElementById('new-category-input')?.focus(), 50);
+    }
+
+    function closeCategoryModal() {
+      document.getElementById('category-modal').classList.add('hidden');
+    }
+
+    function renderCategoryManageList() {
+      const box = document.getElementById('category-manage-list');
+      if (!box) return;
+
+      if (state.categories.length === 0) {
+        box.innerHTML = `<p class="text-xs text-slate-400 text-center py-4">尚未建立任何分類，可在上方輸入名稱新增</p>`;
+        return;
+      }
+
+      box.innerHTML = state.categories.map(cat => {
+        const count = state.songs.filter(s => (s.category || '').trim() === cat).length;
+        const encoded = encodeURIComponent(cat);
+        return `
+          <div class="flex items-center justify-between px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-sm">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="font-semibold text-slate-800 truncate">${escapeHtml(cat)}</span>
+              <span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-violet-100 text-violet-700">${count} 首</span>
+            </div>
+            <button type="button" onclick="deleteCategoryEncoded('${encoded}')" title="刪除此分類"
+              class="text-xs text-slate-400 hover:text-rose-600 px-2 py-1 rounded-lg hover:bg-rose-50 transition">
+              刪除
+            </button>
+          </div>`;
+      }).join('');
+    }
+
+    function handleAddCategory(e) {
+      e.preventDefault();
+      const input = document.getElementById('new-category-input');
+      const name = input.value.trim();
+      if (!name) return;
+
+      const exists = state.categories.some(c => c.toLowerCase() === name.toLowerCase());
+      if (exists) {
+        showToast(`分類「${name}」已經存在`);
+        return;
+      }
+
+      state.categories.push(name);
+      input.value = '';
+      renderCategoryManageList();
+      showToast(`已新增分類「${name}」`);
+      pushToCloud();
+    }
+
+    function deleteCategoryEncoded(encodedCat) {
+      const cat = decodeURIComponent(encodedCat);
+      const affectedCount = state.songs.filter(s => (s.category || '').trim() === cat).length;
+      const msg = affectedCount > 0
+        ? `確定要刪除分類「${cat}」？（該分類下的 ${affectedCount} 首曲目會保留，僅變為「無分類」）`
+        : `確定要刪除分類「${cat}」？`;
+
+      if (!confirm(msg)) return;
+
+      state.categories = state.categories.filter(c => c !== cat);
+      if (affectedCount > 0) {
+        state.songs.forEach(s => {
+          if ((s.category || '').trim() === cat) {
+            s.category = '';
+            s.updatedAt = new Date().toISOString();
+          }
+        });
+      }
+      if (state.selectedCategory === cat) {
+        state.selectedCategory = 'all';
+      }
+
+      renderCategoryManageList();
+      showToast(`已刪除分類「${cat}」`);
       pushToCloud();
     }
 
@@ -653,8 +938,8 @@
           map.set(key, s);
         } else {
           const existing = map.get(key);
-          const existingScore = (existing.steps.fetch?1:0) + (existing.steps.simplify?1:0) + (existing.steps.audio?1:0) + (existing.steps.upload?1:0) + ((existing.files||[]).length * 2);
-          const currentScore = (s.steps.fetch?1:0) + (s.steps.simplify?1:0) + (s.steps.audio?1:0) + (s.steps.upload?1:0) + ((s.files||[]).length * 2);
+          const existingScore = (existing.steps.fetch?1:0) + (existing.steps.simplify?1:0) + (existing.steps.audio?1:0) + (existing.steps.upload?1:0) + ((existing.files||[]).length * 2) + (existing.category ? 1 : 0);
+          const currentScore = (s.steps.fetch?1:0) + (s.steps.simplify?1:0) + (s.steps.audio?1:0) + (s.steps.upload?1:0) + ((s.files||[]).length * 2) + (s.category ? 1 : 0);
           if (currentScore > existingScore) {
             map.set(key, s);
           }
@@ -715,8 +1000,10 @@
     function openEditModal(songId) {
       const song = state.songs.find(s => s.id === songId);
       if (!song) return;
+      updateCategorySelectOptions();
       document.getElementById('edit-song-id').value = song.id;
       document.getElementById('edit-title').value = song.title;
+      document.getElementById('edit-category').value = song.category || '';
       document.getElementById('edit-date').value = toLocalInputDate(song.createdAt);
       document.getElementById('edit-source').value = song.source || 'MuseScore';
       document.getElementById('edit-notes').value = song.notes || '';
@@ -773,6 +1060,7 @@
       if (!song) return;
 
       const newTitle = document.getElementById('edit-title').value.trim();
+      const newCategory = document.getElementById('edit-category').value.trim();
       const dateVal = document.getElementById('edit-date').value;
       const newSource = document.getElementById('edit-source').value;
       const newNotes = document.getElementById('edit-notes').value.trim();
@@ -780,6 +1068,7 @@
       if (!newTitle) return;
 
       song.title = newTitle;
+      song.category = newCategory;
       song.source = newSource;
       song.notes = newNotes;
 
@@ -989,7 +1278,11 @@
       const sortBy = document.getElementById('sort-by').value;
 
       const filtered = state.songs.filter(s => {
-        if (q && !s.title.toLowerCase().includes(q) && !(s.notes || '').toLowerCase().includes(q)) return false;
+        const songCat = (s.category || '').trim();
+        if (state.selectedCategory === '__uncategorized__' && songCat !== '') return false;
+        if (state.selectedCategory !== 'all' && state.selectedCategory !== '__uncategorized__' && songCat !== state.selectedCategory) return false;
+
+        if (q && !s.title.toLowerCase().includes(q) && !(s.notes || '').toLowerCase().includes(q) && !songCat.toLowerCase().includes(q)) return false;
         if (source !== 'all' && s.source !== source) return false;
 
         const isDone = s.steps.fetch && s.steps.simplify && s.steps.audio && s.steps.upload;
@@ -1019,6 +1312,8 @@
 
     function renderAll() {
       updateDashboard();
+      updateCategorySelectOptions();
+      renderCategoryStatsBar();
       renderSongs();
     }
 
@@ -1030,7 +1325,7 @@
         container.innerHTML = `
           <div class="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center">
             <p class="text-sm font-medium text-slate-500">暫無符合條件的曲目紀錄</p>
-            <p class="text-xs text-slate-400 mt-1">在上方輸入歌名即可開始追蹤「攞譜 → 簡化 → 音檔 → 上載」進度</p>
+            <p class="text-xs text-slate-400 mt-1">在上方輸入歌名或切換分類標籤即可檢視對應曲目</p>
           </div>`;
         return;
       }
@@ -1055,6 +1350,17 @@
           }">
           <span>${active ? '✓' : '○'}</span>
           <span>${label}</span>
+        </button>`;
+    }
+
+    function renderCategoryBadge(category) {
+      const cat = (category || '').trim();
+      if (!cat) return '';
+      const encoded = encodeURIComponent(cat);
+      return `
+        <button type="button" onclick="selectCategoryEncoded('${encoded}')" title="點擊篩選「${escapeHtml(cat)}」分類"
+          class="px-2 py-0.5 text-[11px] font-semibold rounded-md bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 transition">
+          #${escapeHtml(cat)}
         </button>`;
     }
 
@@ -1087,6 +1393,7 @@
                     <h3 class="text-base font-bold ${isDone ? 'text-slate-500 line-through' : 'text-slate-900'} truncate">
                       ${escapeHtml(s.title)}
                     </h3>
+                    ${renderCategoryBadge(s.category)}
                     <span class="px-2 py-0.5 text-[11px] font-semibold rounded-md ${
                       s.source === 'MuseScore' ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-100 text-slate-600'
                     }">${escapeHtml(s.source)}</span>
@@ -1108,7 +1415,7 @@
                     class="px-2 py-1.5 text-xs font-medium text-slate-600 hover:text-sky-700 bg-slate-50 hover:bg-sky-50 border border-slate-200 rounded-lg transition">
                     📎 備份檔
                   </button>
-                  <button type="button" onclick="openEditModal('${s.id}')" title="編輯歌名、加入日期與管理檔案"
+                  <button type="button" onclick="openEditModal('${s.id}')" title="編輯歌名、分類、加入日期與管理檔案"
                     class="p-1.5 text-slate-500 hover:text-slate-900 rounded-lg hover:bg-slate-100 transition text-xs">
                     ✎
                   </button>
@@ -1149,6 +1456,7 @@
                         <button onclick="deleteSong('${s.id}')" title="刪除" class="text-slate-300 hover:text-rose-500 text-xs">✕</button>
                       </div>
                     </div>
+                    ${s.category ? `<div>${renderCategoryBadge(s.category)}</div>` : ''}
                     ${s.notes ? `<p class="text-xs text-slate-500">${escapeHtml(s.notes)}</p>` : ''}
                     ${renderFileBadges(s)}
                     <div class="flex flex-wrap gap-1 pt-1">
@@ -1166,16 +1474,22 @@
     }
 
     function renderCatalogView(container, songs) {
+      const catHeader = state.selectedCategory === 'all'
+        ? '純曲目清單'
+        : state.selectedCategory === '__uncategorized__'
+          ? '純曲目清單（未分類）'
+          : `純曲目清單（#${escapeHtml(state.selectedCategory)}）`;
+
       container.innerHTML = `
         <div class="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
           <div class="px-5 py-3.5 bg-slate-50/80 border-b border-slate-200 flex items-center justify-between gap-3">
             <div class="flex items-center gap-2">
-              <span class="text-xs font-bold text-slate-700">純曲目清單</span>
+              <span class="text-xs font-bold text-slate-700">${catHeader}</span>
               <span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-slate-200/80 text-slate-700">共 ${songs.length} 首</span>
             </div>
             <button type="button" onclick="copyAllCatalogTitles()"
               class="px-3 py-1 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg transition shadow-2xs">
-              📋 一鍵複製全部歌名
+              📋 一鍵複製目前歌名
             </button>
           </div>
           <div class="divide-y divide-slate-100">
@@ -1186,9 +1500,10 @@
               const fileCount = (s.files || []).length;
               return `
                 <div class="px-5 py-3 flex items-center justify-between gap-3 hover:bg-slate-50/70 transition">
-                  <div class="flex items-center gap-3 min-w-0">
+                  <div class="flex items-center gap-2.5 min-w-0">
                     <span class="w-7 text-xs font-mono text-slate-400 shrink-0">${idx + 1}.</span>
                     <span class="text-sm font-semibold text-slate-900 truncate">${escapeHtml(s.title)}</span>
+                    ${renderCategoryBadge(s.category)}
                     ${s.notes ? `<span class="hidden sm:inline text-xs text-slate-400 truncate">— ${escapeHtml(s.notes)}</span>` : ''}
                   </div>
                   <div class="flex items-center gap-2 shrink-0">
@@ -1250,6 +1565,7 @@
     }
 
     function openBatchModal() {
+      updateCategorySelectOptions();
       document.getElementById('batch-modal').classList.remove('hidden');
     }
     function closeBatchModal() {
@@ -1257,6 +1573,7 @@
     }
     function handleBatchAdd() {
       const raw = document.getElementById('batch-textarea').value;
+      const category = document.getElementById('batch-category').value.trim();
       const source = document.getElementById('batch-source').value;
       const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
       if (!lines.length) return;
@@ -1269,9 +1586,16 @@
         const norm = normalizeTitle(title);
         if (norm && !existing.has(norm)) {
           existing.add(norm);
+          // 若批量未指定全局分類，亦自動檢查歌名是否匹配現有分類關鍵字
+          let autoCat = category;
+          if (!autoCat && state.categories.length > 0) {
+            const lowerTitle = title.toLowerCase();
+            autoCat = state.categories.find(c => lowerTitle.includes(c.toLowerCase())) || '';
+          }
           state.songs.unshift({
             id: 'song_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
             title,
+            category: autoCat,
             source,
             notes: '',
             steps: { fetch: true, simplify: false, audio: false, upload: false },
@@ -1316,9 +1640,14 @@
           imported.forEach(item => {
             if (item.title && !existing.has(normalizeTitle(item.title))) {
               existing.add(normalizeTitle(item.title));
+              const cat = String(item.category || '').trim();
+              if (cat && !state.categories.includes(cat)) {
+                state.categories.push(cat);
+              }
               state.songs.push({
                 id: item.id || 'song_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
                 title: String(item.title),
+                category: cat,
                 source: item.source || 'MuseScore',
                 notes: item.notes || '',
                 steps: {
